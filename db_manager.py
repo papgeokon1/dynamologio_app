@@ -25,3 +25,11 @@ def eisagogi_stratioti(onoma, arithmos, kinito, kathgoria_i, enoplos):
     """, (onoma, arithmos, kinito, kathgoria_i, enoplos))
     conn.commit()
     conn.close()
+
+def pare_stratiotes():
+    conn = sqlite3.connect("dynamologio.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM stratiotes")
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
