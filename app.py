@@ -22,7 +22,8 @@ def check_password():
 
 if not check_password():
     st.stop()
-DB_PATH = r"C:\Users\georg\OneDrive\Υπολογιστής\dynamologio_app\dynamologio_final.db"
+DB_PATH = "dynamologio_final.db"
+
 
 def get_connection():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
