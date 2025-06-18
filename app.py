@@ -2,6 +2,26 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 
+
+def check_password():
+    def login_form():
+        with st.form("login"):
+            st.text_input("Username", key="username")
+            st.text_input("Password", type="password", key="password")
+            submitted = st.form_submit_button("Login")
+            if submitted:
+                if st.session_state.username == "625tp" and st.session_state.password == "Papakostidis1!":
+                    st.session_state.logged_in = True
+                else:
+                    st.error("❌ Λάθος στοιχεία.")
+
+    if "logged_in" not in st.session_state:
+        login_form()
+        return False
+    return True
+
+if not check_password():
+    st.stop()
 DB_PATH = r"C:\Users\georg\OneDrive\Υπολογιστής\dynamologio_app\dynamologio_final.db"
 
 def get_connection():
