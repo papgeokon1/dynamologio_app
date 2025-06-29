@@ -269,9 +269,17 @@ def export_to_excel(title):
             "Μονάδα": 12
         }
 
-        # Προσθήκη τίτλου χρήστη
         worksheet.merge_range(row, 0, row, 7, title, header_format)
         row += 2
+
+        # Καταστάσεις που απαιτούν ανάλυση ανά μονάδα
+        monadikes = [
+            "Διάθεση εντός φρουράς",
+            "Διάθεση εκτός φρουράς",
+            "Ενίσχυση",
+            "Ειδικότητα",
+            "ΚΑΑΥ"
+        ]
 
         for _, kat in katastaseis_df.iterrows():
             kname = kat["onoma"]
@@ -279,7 +287,7 @@ def export_to_excel(title):
             if kdf.empty:
                 continue
 
-            if kname in ["Ειδικότητα", "Ενίσχυση", "ΚΑΑΥ"]:
+            if kname in monadikes:
                 monades = kdf["monada"].dropna().unique()
                 worksheet.write(row, 0, kname.upper(), bold)
                 row += 1
@@ -302,7 +310,7 @@ def export_to_excel(title):
                         width = column_widths.get(col_name, 15)
                         worksheet.set_column(col_idx, col_idx, width, wrap_format)
 
-                    row += len(sub_kdf) + 2
+                    row += len(sub_kdf) + 3
             else:
                 worksheet.write(row, 0, kname.upper(), bold)
                 row += 1
@@ -325,6 +333,7 @@ def export_to_excel(title):
 
                 row += len(kdf) + 2
 
+        # Σύνολο και στατιστικά
         total = len(df)
         worksheet.write(row, 0, f"ΣΥΝΟΛΙΚΟΣ ΑΡΙΘΜΟΣ ΣΤΡΑΤΙΩΤΩΝ: {total}", bold)
         row += 2
@@ -346,6 +355,54 @@ def export_to_excel(title):
     output.seek(0)
     return output
 
+def export_apousiologio(date):
+    conn = get_connection()
+
+    # Φόρτωση στρατιωτών + καταστάσεις
+    df = pd.read_sql_query("""
+        SELECT s.asm, s.onomateponymo, k.onoma AS katastasi
+        FROM stratiotes s
+        LEFT JOIN katastaseis k ON s.katastasi_id = k.id
+    """, conn)
+
+    # Φόρτωση αδειών για την ημερομηνία αυτή
+    query_adeies = """
+        SELECT stratiotis_asm, eidos
+        FROM adeies
+        WHERE ? BETWEEN apo AND eos
+    """
+    df_adeies = pd.read_sql_query(query_adeies, conn, params=(date,))
+    conn.close()
+
+    adeia_dict = dict(zip(df_adeies["stratiotis_asm"], df_adeies["eidos"]))
+
+    def compute_status(row):
+        asm = row["asm"]
+        kat = row["katastasi"]
+
+        if kat == "Παρόντες":
+            return "1"
+        elif kat == "Αδειούχοι":
+            return adeia_dict.get(asm, "")
+        elif kat in ["Διάθεση εντός φρουράς", "Διάθεση εκτός φρουράς", "Ενίσχυση"]:
+            return "Ε-Δ"
+        else:
+            return ""
+
+    df["Καταγραφή"] = df.apply(compute_status, axis=1)
+    df_final = df[["asm", "onomateponymo", "Καταγραφή"]].rename(columns={
+        "asm": "ΑΣΜ",
+        "onomateponymo": "Ονοματεπώνυμο"
+    })
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df_final.to_excel(writer, sheet_name="Απουσιολόγιο", index=False)
+        worksheet = writer.sheets["Απουσιολόγιο"]
+        worksheet.set_column("A:C", 20)
+        worksheet.write(0, 3, f"Ημερομηνία: {date.strftime('%d-%m-%Y')}")
+    output.seek(0)
+    return output
 
 
 # 👉 Προσθήκη στο κάτω μέρος της εφαρμογής
@@ -356,3 +413,12 @@ export_title = st.text_input("Τίτλος αρχείου (θα εμφανιστ
 if st.button("📥 Εξαγωγή σε Excel"):
     excel_data = export_to_excel(export_title)
     st.download_button("⬇️ Λήψη Excel", data=excel_data.getvalue(), file_name=f"{filename}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+st.subheader("📤 Εξαγωγή Απουσιολογίου")
+filename_absence = st.text_input("Όνομα αρχείου Excel απουσιολογίου", value="apousiologio")
+export_date = st.date_input("Ημερομηνία Καταγραφής", value=pd.Timestamp.today())
+
+if st.button("📥 Εξαγωγή Απουσιολογίου"):
+    absence_data = export_apousiologio(export_date)
+    st.download_button("⬇️ Λήψη Απουσιολογίου", data=absence_data.getvalue(),
+                       file_name=f"{filename_absence}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
